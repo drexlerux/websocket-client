@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8">
+	<title>Document</title>
+	<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/twitter-bootstrap/4.4.1/css/bootstrap.css" />
+	<style>
+		.container {
+			margin-top: 10px;
+		}
+		pre {outline: 1px solid #ccc; padding: 5px; margin: 5px; height: 468px}
+		pre .string { color: green; }
+		pre .number { color: darkorange; }
+		pre .boolean { color: blue; }
+		pre .null { color: magenta; }
+		pre .key { color: red; }
+		textarea {font-size: .8rem !important;}
+		i{font-size: .8rem; color: #52ABCA; height: 20px; display: block}
+		.prompt{
+			position: relative;
+		}
+		button.clear{
+			position: absolute;
+			top: 0;
+			margin-top: -35px;
+			margin-left: 19px;
+			left: 0
+		}
+
+	</style>
+</head>
+<body>
+	<div id="app">
+		<div class="container">
+			<div class="row">
+				<hr>
+			</div>
+			<div class="row">
+				<div class="col-md-6">
+					<input type="text" class="form-control" placeholder="URL" v-model="url" @change="storeUrl">
+					<br>
+					<select v-model="contentType" class="form-control">
+						<option v-for="cc in contentTypes" :value="cc.value">{{cc.text}}</option>
+					</select>
+					<i>{{rurl}}</i>
+					<textarea rows="18" class="form-control" placeholder="TOKEN" v-model="token"  @change="storeToken"></textarea><hr>
+					<button type="buttom" class="btn btn-success"  @click.stop.prevent="connect" v-show="connected === false">Connect</button>
+					<button type="button" class="btn btn-danger" @click="disconect" v-show="connected">Disconnect</button>
+				</div>
+				<div class="col-md-6 prompt">
+					<button class="btn btn-danger btn-sm clear" @click="clearPrompt">Clear</button>
+					<pre  v-html="result"></pre>
+				</div>
+			</div>
+		</div>
+	</div>
+	<script src="https://cdnjs.cloudflare.com/ajax/libs/blueimp-md5/2.12.0/js/md5.js"></script>
+	<script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.4.1/jquery.min.js"></script>
+	<script src="https://cdnjs.cloudflare.com/ajax/libs/twitter-bootstrap/4.4.1/js/bootstrap.js"></script>
+	<script src="https://cdnjs.cloudflare.com/ajax/libs/vue/2.6.11/vue.js"></script>
+	<script>
+		var v = new Vue({
+			el: "#app",
+			data: {
+				url: "",
+				rurl: "",
+				token: "",
+				result: "",
+				socket: null,
+				reader: new FileReader(),
+				connected: false,
+				contentType: "raw",
+				contentTypes: [
+					{value: "raw", text: "Raw content"},
+					{value: "binary", text: "Binary data"},
+				]
+			},
+			mounted(){
+				let storedUrl = localStorage.getItem("url")
+				if(storedUrl){
+					this.url = storedUrl
+				}
+
+				let storedToken = localStorage.getItem("token")
+				if(storedToken){
+					this.token = storedToken
+				}
+
+				this.reader.onload = e => {
+				  this.result += `${syntaxHighlight(JSON.stringify(JSON.parse(this.reader.result), undefined, 4))}<hr>`
+				}
+
+			},	
+			methods: {
+				connect(){
+					this.rurl = new URL(this.url)
+					this.rurl.searchParams.set("ct", this.contentType)
+					this.socket = new WebSocket(this.rurl);
+					this.result = ""
+					if (this.socket != null) {
+						this.socket.onopen =  (event) => {
+							this.connected = true
+							this.socket.send(JSON.stringify({event: "authorization", payload: {"authorization": this.token}}))
+						}
+
+						this.socket.onmessage = (event) => {
+							//this.reader = new FileReader()
+							if(this.contentType == "raw"){
+								this.result = `${syntaxHighlight(JSON.stringify(JSON.parse(event.data), undefined, 4))}<hr>`
+							}else{
+								this.reader.readAsText(event.data)
+							}
+						  	
+						}
+
+						this.socket.onclose = (event) => {
+							//this.reader = new FileReader()
+							this.connected = false
+							this.result = "DISCONECTED"
+							this.socket = null
+						  	//this.result = syntaxHighlight(JSON.stringify(JSON.parse(event.data), undefined, 4))
+						}
+					}
+
+				},
+				disconect(){
+				   	if (this.socket.readyState === WebSocket.OPEN) {
+				      	this.socket.close();
+				   	}
+				},
+				storeUrl(){
+					if(this.url.trim() != "")
+						localStorage.setItem("url", this.url)
+				},
+				storeToken(){
+					if(this.token.trim() != "")
+						localStorage.setItem("token", this.token)
+				},
+				clearPrompt(){
+					this.result = ""
+				}
+			}
+		})
+
+		function syntaxHighlight(json) {
+		    if (typeof json != 'string') {
+		         json = JSON.stringify(json, undefined, 2);
+		    }
+		    json = json.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+		    return json.replace(/("(\\u[a-zA-Z0-9]{4}|\\[^u]|[^\\"])*"(\s*:)?|\b(true|false|null)\b|-?\d+(?:\.\d*)?(?:[eE][+\-]?\d+)?)/g, function (match) {
+		        var cls = 'number';
+		        if (/^"/.test(match)) {
+		            if (/:$/.test(match)) {
+		                cls = 'key';
+		            } else {
+		                cls = 'string';
+		            }
+		        } else if (/true|false/.test(match)) {
+		            cls = 'boolean';
+		        } else if (/null/.test(match)) {
+		            cls = 'null';
+		        }
+		        return '<span class="' + cls + '">' + match + '</span>';
+		    });
+		}
+	</script>
+</body>
+</html>
